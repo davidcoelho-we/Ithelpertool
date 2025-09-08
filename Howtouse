@@ -1,0 +1,3 @@
+Como executar o multitool 
+
+iex (irm "https://raw.githubusercontent.com/davidcoelho-we/Ithelpertool/main/multitool.ps1")
