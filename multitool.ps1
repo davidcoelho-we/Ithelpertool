@@ -1,9 +1,146 @@
-```powershell
-# ================= MULTITOOL POWERSHELL =================
+# =========================
+#        MULTITOOL
+# =========================
 
-function Show-Menu {
+function Info-Sistema {
     Clear-Host
-    Write-Host "================ MULTITOOL ================="
+    Write-Host "==== INFORMAÇÕES DO SISTEMA ====" -ForegroundColor Cyan
+    systeminfo | Out-String | more
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host
+}
+
+function Teste-Rede {
+    Clear-Host
+    Write-Host "==== TESTE DE REDE ====" -ForegroundColor Cyan
+
+    # Pergunta se o usuário quer digitar um host ou usar lista padrão
+    $opcao = Read-Host "Deseja digitar um host/IP manualmente? (S/N)"
+
+    if ($opcao -match '^[sS]$') {
+        $host = Read-Host "Digite o endereço ou IP para teste de rede"
+        $hosts = @($host)
+    }
+    else {
+        # Lista padrão de hosts
+        $hosts = @("8.8.8.8", "1.1.1.1", "www.google.com", "www.microsoft.com")
+    }
+
+    foreach ($host in $hosts) {
+        Write-Host "`nPing em: $host" -ForegroundColor Yellow
+        try {
+            Test-Connection -ComputerName $host -Count 4 -ErrorAction Stop |
+                Select-Object Address, ResponseTime, IPV4Address |
+                Format-Table -AutoSize
+        }
+        catch {
+            Write-Host "Falha ao pingar $host" -ForegroundColor Red
+        }
+    }
+
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host
+}
+
+function Logs-Erros {
+    Clear-Host
+    Write-Host "==== LOGS DE ERROS ====" -ForegroundColor Cyan
+    Get-EventLog -LogName System -EntryType Error -Newest 20 |
+        Format-Table TimeGenerated, Source, EventID, Message -AutoSize
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host
+}
+
+function Flush-DNS {
+    Clear-Host
+    Write-Host "==== FLUSH DNS ====" -ForegroundColor Cyan
+    ipconfig /flushdns
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host
+}
+
+function Relatorio-Bateria {
+    Clear-Host
+    Write-Host "==== RELATÓRIO DE BATERIA ====" -ForegroundColor Cyan
+
+    $reportPath = "$env:USERPROFILE\Desktop\Relatorio_Bateria"
+    New-Item -Path $reportPath -ItemType Directory -Force | Out-Null
+
+    $uptime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
+    $uptimeDuration = (Get-Date) - $uptime
+
+    $batteryReportPath = "$reportPath\battery-report.html"
+    powercfg /batteryreport /output $batteryReportPath | Out-Null
+
+    $batteryInfo = Get-CimInstance -Namespace root\wmi -ClassName BatteryFullChargedCapacity
+    $designInfo  = Get-CimInstance -Namespace root\wmi -ClassName BatteryStaticData
+
+    if ($batteryInfo -and $designInfo) {
+        $fullCharge = $batteryInfo.FullChargedCapacity
+        $designCap = $designInfo.DesignedCapacity
+        $healthPercent = [math]::Round(($fullCharge / $designCap) * 100, 2)
+
+        if ($healthPercent -lt 70) {
+            $batteryStatus = "⚠️ A bateria está com $healthPercent% da capacidade original. Recomenda-se substituição."
+        } else {
+            $batteryStatus = "✅ A bateria está saudável, com $healthPercent% da capacidade original."
+        }
+    } else {
+        $batteryStatus = "⚠️ Não foi possível determinar o estado da bateria."
+    }
+
+    $reportTextPath = "$reportPath\relatorio_bateria.txt"
+
+@"
+==== RELATÓRIO DE USO E SAÚDE DA BATERIA ====
+
+[1] Tempo que o computador está ligado:
+      - Desde: $uptime
+      - Duração: $([math]::Round($uptimeDuration.TotalHours,2)) horas
+
+[2] Saúde da bateria:
+      - $batteryStatus
+
+[3] Relatório de saúde detalhado:
+      - Gerado em: $batteryReportPath
+"@ | Out-File -FilePath $reportTextPath -Encoding UTF8
+
+    Start-Process notepad.exe $reportTextPath
+    Start-Process $batteryReportPath
+}
+
+function Lenovo-Update {
+    Clear-Host
+    Write-Host "==== ATUALIZAR LENOVO (SYSTEM UPDATE) ====" -ForegroundColor Cyan
+
+    $path = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
+
+    if (Test-Path $path) {
+        Write-Host "Executando Lenovo System Update em modo silencioso..." -ForegroundColor Green
+        Start-Process -FilePath $path -ArgumentList "/CM" -Wait
+    }
+    else {
+        Write-Host "Lenovo System Update não encontrado. Instale o software primeiro." -ForegroundColor Red
+    }
+
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host
+}
+
+function Windows-Decrapifier {
+    Clear-Host
+    Write-Host "==== WINDOWS DECRAPIFIER ====" -ForegroundColor Cyan
+    Write-Host "Essa função pode ser expandida para remover apps desnecessários." -ForegroundColor Yellow
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host
+}
+
+# =========================
+#        MENU
+# =========================
+do {
+    Clear-Host
+    Write-Host "================ MULTITOOL =================" -ForegroundColor Cyan
     Write-Host "1. Informações do Sistema"
     Write-Host "2. Teste de Rede"
     Write-Host "3. Logs de Erros"
@@ -12,108 +149,18 @@ function Show-Menu {
     Write-Host "6. Windows Decrapifier"
     Write-Host "7. Atualizar Lenovo (System Update)"
     Write-Host "0. Sair"
-    Write-Host "============================================"
-}
+    Write-Host "==========================================="
+    $opcao = Read-Host "Selecione uma opção"
 
-# ==== FUNÇÕES ====
-
-function Get-SystemInfo {
-    Get-ComputerInfo | Select-Object CsName, WindowsProductName, WindowsVersion, OsHardwareAbstractionLayer
-    Pause
-}
-
-function Test-Network {
-    Test-Connection -ComputerName 8.8.8.8 -Count 4
-    Pause
-}
-
-function Get-ErrorLogs {
-    Get-EventLog -LogName System -Newest 20 | Format-Table TimeGenerated, EntryType, Source, EventID, Message -AutoSize
-    Pause
-}
-
-function Flush-DNS {
-    Clear-DnsClientCache
-    Write-Host "Cache DNS limpo com sucesso."
-    Pause
-}
-
-function Get-BatteryReport {
-    powercfg /batteryreport /output "$env:USERPROFILE\Desktop\battery_report.html"
-    Write-Host "Relatório gerado na área de trabalho."
-    Pause
-}
-
-function Run-WindowsDecrapifier {
-    Write-Output "Iniciando Windows Decrapifier..."
-    & ([scriptblock]::Create((irm "https://win11debloat.raphi.re/"))) -Silent -RunDefaults -RemoveW11Outlook -RemoveGamingApps -DisableDVR -DisableTelemetry -DisableBing -DisableSuggestions -DisableLockscreenTips -TaskbarAlignLeft -ShowSearchIconTb -HideTaskView -HideChat -DisableWidgets -DisableCopilot -DisableRecall -HideHome -HideGallery
-    Write-Host "Windows Decrapifier concluído."
-    Pause
-}
-
-function Atualizar-LenovoSystemUpdate {
-    $logPath = "$env:USERPROFILE\Desktop\Lenovo_Update_Log.txt"
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Add-Content -Path $logPath -Value "[$timestamp] Iniciando verificação e atualização do Lenovo System Update..."
-
-    $path1 = "C:\\Program Files (x86)\\Lenovo\\System Update\\tvsu.exe"
-    $path2 = "C:\\Program Files\\Lenovo\\System Update\\tvsu.exe"
-
-    if (!(Test-Path $path1) -and !(Test-Path $path2)) {
-        Write-Host "Lenovo System Update não encontrado. Baixando e instalando..."
-        Add-Content -Path $logPath -Value "[$timestamp] Lenovo System Update não encontrado. Baixando instalador."
-
-        $installer = "$env:TEMP\\SystemUpdateSetup.exe"
-        Invoke-WebRequest -Uri "https://download.lenovo.com/pccbbs/thinkvantage_en/system_update_5.08.02.25.exe" -OutFile $installer
-        Start-Process $installer -ArgumentList "/VERYSILENT /NORESTART" -Wait
-
-        Add-Content -Path $logPath -Value "[$timestamp] Lenovo System Update instalado com sucesso."
+    switch ($opcao) {
+        1 { Info-Sistema }
+        2 { Teste-Rede }
+        3 { Logs-Erros }
+        4 { Flush-DNS }
+        5 { Relatorio-Bateria }
+        6 { Windows-Decrapifier }
+        7 { Lenovo-Update }
+        0 { break }
+        default { Write-Host "Opção inválida. Pressione Enter para tentar novamente."; Read-Host }
     }
-
-    $suExe = if (Test-Path $path1) { $path1 } elseif (Test-Path $path2) { $path2 } else { $null }
-
-    if ($suExe) {
-        $tempLog = "$env:TEMP\\LenovoSilentUpdate.log"
-        if (Test-Path $tempLog) { Remove-Item $tempLog -Force }
-
-        Start-Process $suExe -ArgumentList "/CM -search A -action INSTALL -includerebootpackages 3 -noreboot -exportlog $tempLog" -Wait
-
-        $updatesInstalled = 0
-        if (Test-Path $tempLog) {
-            $updatesInstalled = (Select-String -Path $tempLog -Pattern "Install complete").Count
-        }
-
-        $timestampEnd = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-        Add-Content -Path $logPath -Value "[$timestampEnd] Atualização concluída. Pacotes instalados: $updatesInstalled"
-        Write-Host "Atualização concluída. $updatesInstalled pacotes aplicados. Log salvo em: $logPath"
-
-        # Abrir o log automaticamente
-        Start-Process notepad.exe $logPath
-    } else {
-        Write-Host "Erro: Lenovo System Update não encontrado após instalação."
-        Add-Content -Path $logPath -Value "[$timestamp] Erro: Lenovo System Update não encontrado após tentativa de instalação."
-        Start-Process notepad.exe $logPath
-    }
-
-    Pause
-}
-
-# ==== EXECUÇÃO ====
-
-do {
-    Show-Menu
-    $choice = Read-Host "Selecione uma opção"
-
-    switch ($choice) {
-        "1" { Get-SystemInfo }
-        "2" { Test-Network }
-        "3" { Get-ErrorLogs }
-        "4" { Flush-DNS }
-        "5" { Get-BatteryReport }
-        "6" { Run-WindowsDecrapifier }
-        "7" { Atualizar-LenovoSystemUpdate }
-        "0" { Write-Host "Saindo..." }
-        default { Write-Host "Opção inválida."; Pause }
-    }
-} while ($choice -ne "0")
-```
+} while ($true)
