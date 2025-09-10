@@ -9,7 +9,7 @@ function Show-Menu {
     Write-Host "2. Teste de Rede"
     Write-Host "3. Relatório de Bateria"
     Write-Host "4. Testar Áudio/Vídeo"
-    Write-Host "5. Atualizar Lenovo (System Update - silencioso)"
+    Write-Host "5. Atualizar Lenovo (System Update)"
     Write-Host "0. Sair"
 }
 
@@ -68,10 +68,22 @@ function AV-Test {
     Pause
 }
 
-# 5 - Lenovo Update (silencioso)
+# 5 - Lenovo Update (com opção de modo de instalação)
 function Lenovo-Update {
     Clear-Host
-    Write-Host "==== LENOVO SYSTEM UPDATE (SILENCIOSO) ====" -ForegroundColor Cyan
+    Write-Host "==== LENOVO SYSTEM UPDATE ====" -ForegroundColor Cyan
+
+    # Pergunta ao usuário qual modo de instalação usar se o programa não for encontrado
+    Write-Host "Escolha o modo de instalação (caso o System Update não esteja presente):"
+    Write-Host "1. Totalmente Silencioso (nenhuma janela visível)" -ForegroundColor Yellow
+    Write-Host "2. Semi-Silencioso (mostra apenas a barra de progresso)" -ForegroundColor Yellow
+    $installMode = Read-Host "Selecione uma opção [Padrão: 1]"
+ 
+    $installerArgs = ""
+    switch ($installMode) {
+        '2' { $installerArgs = '/s /v"/qb"' }
+        default { $installerArgs = '/s /v"/qn"' } # Padrão para '1' ou qualquer outra tecla
+    }
 
     $exePath = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
     $downloadPath = "$env:TEMP\SystemUpdateInstaller.exe"
@@ -96,7 +108,7 @@ function Lenovo-Update {
     }
 
     if (Test-Path $exePath) {
-        Write-Host "System Update encontrado. Iniciando em modo silencioso..." -ForegroundColor Green
+        Write-Host "System Update encontrado. Iniciando busca por atualizações..." -ForegroundColor Green
         try {
             Start-Process -FilePath $exePath -ArgumentList "/CM -search A -action INSTALL -includerebootpackages 3 -noicon" -Wait -NoNewWindow
             Copy-LenovoLogs -SourceDir $lenovoLogsDir -DestDir $desktopLogsDir
@@ -104,14 +116,18 @@ function Lenovo-Update {
             Write-Host "Erro ao executar atualização: $($_.Exception.Message)" -ForegroundColor Red
         }
     } else {
-        Write-Host "System Update não instalado. Baixando e instalando..." -ForegroundColor Yellow
+        Write-Host "System Update não instalado. Baixando e instalando no modo escolhido..." -ForegroundColor Yellow
         try {
             Invoke-WebRequest -Uri $downloadURL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
-            Start-Process -FilePath $downloadPath -ArgumentList "/s /v`"/qn`"" -Wait -NoNewWindow
+            # Usa a variável com os argumentos de instalação escolhidos pelo usuário
+            Start-Process -FilePath $downloadPath -ArgumentList $installerArgs -Wait -NoNewWindow
+            
             if (Test-Path $exePath) {
-                Write-Host "Instalação concluída. Executando atualização silenciosa..." -ForegroundColor Green
+                Write-Host "Instalação concluída. Executando busca por atualizações..." -ForegroundColor Green
                 Start-Process -FilePath $exePath -ArgumentList "/CM -search A -action INSTALL -includerebootpackages 3 -noicon" -Wait -NoNewWindow
                 Copy-LenovoLogs -SourceDir $lenovoLogsDir -DestDir $desktopLogsDir
+            } else {
+                Write-Host "A instalação parece ter falhado, o arquivo tvsu.exe não foi encontrado." -ForegroundColor Red
             }
         } catch {
             Write-Host "Falha ao baixar ou instalar: $($_.Exception.Message)" -ForegroundColor Red
@@ -121,6 +137,7 @@ function Lenovo-Update {
     }
     Pause
 }
+
 
 # Loop principal
 do {
