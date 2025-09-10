@@ -290,6 +290,7 @@ function Decrapifier {
             </defaultlayout:TaskbarLayout>
         </CustomTaskbarLayoutCollection>
     </LayoutModificationTemplate>
+    '@
     
     $blankjson | Out-File "C:\Users\Default\AppData\Local\Microsoft\Windows\Shell\LayoutModification.xml" -Encoding utf8 -Force
     
