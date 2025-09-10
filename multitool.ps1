@@ -140,26 +140,39 @@ function Lenovo-UpdateCV {
     $suHelper = "C:\Program Files (x86)\Lenovo\System Update Helper\SUHelper.exe"
     $logDest = "$env:USERPROFILE\Desktop\Vantage_UpdateLogs"
     $logFile = "$logDest\Lenovo_Update_Log.txt"
-    $installerUrl = "https://raw.githubusercontent.com/davidcoelho-we/Ithelpertool/main/VantageInstaller.exe"
-    $installerPath = "$env:TEMP\VantageInstaller.exe"
+    $zipUrl = "https://drive.google.com/uc?export=download&id=1j5vXA0WZCmWwkFepTn5Vip0FTcduM_k6"
+    $zipPath = "$env:TEMP\VantageInstaller.zip"
+    $extractPath = "$env:TEMP\VantageInstaller"
 
-    # Criar pasta de logs
     New-Item -Path $logDest -ItemType Directory -Force | Out-Null
     "==== LOG DE EXECUÇÃO - $(Get-Date) ====" | Out-File $logFile -Encoding UTF8 -Append
 
     try {
-        # Verifica se Vantage está instalado
+        # Verifica se o Vantage já está instalado
         $vantageInstalled = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
         if (-not $vantageInstalled) {
-            Write-Host "Lenovo Commercial Vantage não está instalado. Baixando instalador..." -ForegroundColor Yellow
-            "Baixando instalador de $installerUrl" | Out-File $logFile -Append
+            Write-Host "Lenovo Commercial Vantage não está instalado. Baixando pacote ZIP..." -ForegroundColor Yellow
+            "Baixando de $zipUrl" | Out-File $logFile -Append
 
             try {
-                Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
-                "Download concluído: $installerPath" | Out-File $logFile -Append
-                Write-Host "Instalando Vantage + SU Helper..." -ForegroundColor Cyan
-                Start-Process -FilePath $installerPath -ArgumentList "Install -Vantage -SuHelper" -Wait -NoNewWindow
-                "Instalação concluída." | Out-File $logFile -Append
+                Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+                "Download concluído: $zipPath" | Out-File $logFile -Append
+
+                # Extrai o ZIP
+                Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
+                "Arquivo extraído em: $extractPath" | Out-File $logFile -Append
+
+                # Procura instalador
+                $installer = Get-ChildItem -Path $extractPath -Filter "*.exe" -Recurse | Select-Object -First 1
+                if ($installer) {
+                    Write-Host "Instalando Vantage + SU Helper..." -ForegroundColor Cyan
+                    Start-Process -FilePath $installer.FullName -ArgumentList "/quiet" -Wait -NoNewWindow
+                    "Instalação concluída." | Out-File $logFile -Append
+                } else {
+                    "ERRO: Nenhum instalador encontrado no ZIP extraído." | Out-File $logFile -Append
+                    Write-Host "Nenhum instalador encontrado no ZIP extraído." -ForegroundColor Red
+                    return
+                }
             }
             catch {
                 "ERRO: Falha ao baixar/instalar Vantage -> $($_.Exception.Message)" | Out-File $logFile -Append
@@ -175,28 +188,20 @@ function Lenovo-UpdateCV {
             "ERRO: SU Helper não encontrado em $suHelper" | Out-File $logFile -Append
             Write-Host "SU Helper não encontrado, mesmo após instalação." -ForegroundColor Yellow
             return
-        } else {
-            "SU Helper localizado: $suHelper" | Out-File $logFile -Append
         }
 
-        # Executa SU Helper
+        # Executa SU Helper update
         Write-Host "Executando atualização via SU Helper..." -ForegroundColor Green
-        "Executando SU Helper (update)..." | Out-File $logFile -Append
         Start-Process -FilePath $suHelper -ArgumentList "update" -Wait -NoNewWindow
         "SU Helper finalizado." | Out-File $logFile -Append
 
-        # Coleta histórico de updates
-        Write-Host "Coletando histórico de atualizações..." -ForegroundColor Cyan
-        "Consultando histórico via WMI..." | Out-File $logFile -Append
+        # Histórico de updates
         $updates = Get-CimInstance -Namespace root\lenovo -Class Lenovo_Updates -ErrorAction SilentlyContinue
-
         if ($updates) {
             $updates | Select-Object Severity, Status, Title, Version | Out-File "$logDest\UpdatesHistory.txt" -Encoding UTF8
             $updates | Export-Csv -Path "$logDest\UpdatesHistory.csv" -Encoding UTF8 -NoTypeInformation
-            "Histórico exportado para TXT e CSV." | Out-File $logFile -Append
             Start-Process notepad.exe "$logDest\UpdatesHistory.txt"
         } else {
-            "AVISO: Não foi possível capturar histórico via WMI." | Out-File $logFile -Append
             Write-Host "Não foi possível acessar os dados de histórico via WMI." -ForegroundColor Yellow
         }
     }
