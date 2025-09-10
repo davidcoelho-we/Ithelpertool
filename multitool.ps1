@@ -2,6 +2,16 @@
 # MULTITOOL POWERSHELL
 # ==============================
 
+# --- VERIFICAÇÃO DE ADMINISTRADOR ---
+# Garante que o script está sendo executado com privilégios de Administrador.
+# O Lenovo System Update e outras ferramentas podem exigir isso para funcionar corretamente.
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+    Write-Host "Este script precisa ser executado com privilégios de Administrador." -ForegroundColor Red
+    Write-Host "Por favor, clique com o botão direito no arquivo .ps1 e selecione 'Executar como administrador'." -ForegroundColor Red
+    Start-Sleep -Seconds 5 # Dá tempo ao usuário para ler a mensagem
+    exit # Sai do script
+}
+
 function Show-Menu {
     Clear-Host
     Write-Host "==== MULTITOOL IT ====" -ForegroundColor Cyan
