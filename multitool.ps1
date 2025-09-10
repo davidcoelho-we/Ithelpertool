@@ -537,7 +537,10 @@ do {
         "2" { Relatorio-Bateria }
         "3" { Info-Sistema }
         "4" { Teste-Multimidia }
-        "5" { Decrapifier }
+        "5" { # Decrapifier (Desabilitado devido a erro na execução)
+            # Decrapifier
+            Write-Host "Opção indisponível devido a um erro na execução. Tente novamente mais tarde." -ForegroundColor Yellow
+        }
         "6" { Update-LenovoDriversWithVantage }
         "0" { break }
         default { Write-Host "Opção inválida!" -ForegroundColor Red; Start-Sleep -Seconds 1 }
