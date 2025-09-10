@@ -8,7 +8,7 @@ function Show-Menu {
     Write-Host "1. Teste de Rede (Ping)"
     Write-Host "2. Relatório de Bateria"
     Write-Host "3. Informações do Sistema (exportar TXT)"
-    Write-Host "4. Lenovo System Update (instala e atualiza)"
+    Write-Host "4. Lenovo System Update (instala e atualiza silenciosamente)"
     Write-Host "5. Teste Multimídia (Câmera, Microfone, Speaker)"
     Write-Host "0. Sair"
     Write-Host "======================="
@@ -81,60 +81,100 @@ function Info-Sistema {
 function Lenovo-Update {
     Clear-Host
     Write-Host "==== LENOVO SYSTEM UPDATE ====" -ForegroundColor Cyan
+    Write-Host "==== Usando modo Sideload para instalação/atualização silenciosa ====" -ForegroundColor Yellow
 
     $exePath = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
-    $downloadPath = "$env:TEMP\SystemUpdateInstaller.exe" # Local temporário para o instalador
-    # Usando a URL RAW do GitHub para download direto do executável
-    $downloadURL = "https://raw.githubusercontent.com/davidcoelho-we/Ithelpertool/main/system_update_5.08.03.59.exe" 
+    $downloadPath = "$env:TEMP\SystemUpdateInstaller.exe"
+    $downloadURL = "https://raw.githubusercontent.com/davidcoelho-we/Ithelpertool/main/system_update_5.08.03.59.exe"
+    $sideloadXmlPath = "$env:TEMP\sideload.xml"
+
+    # Conteúdo do arquivo XML para atualização silenciosa
+    # Este XML instrui o System Update a buscar e instalar todas as atualizações.
+    $xmlContent = @"
+<?xml version="1.0" encoding="UTF-8"?>
+<Manifest>
+  <Commands>
+    <Command>
+      <ApplicationName>System Update</ApplicationName>
+      <Parameters>
+        /CM -search A -action INSTALL -includerebootpackages 1 -noreboot -packagetype 1 -packagename ALL
+      </Parameters>
+    </Command>
+  </Commands>
+</Manifest>
+"@
 
     # --- 1. Verificar se o Lenovo System Update já está instalado ---
     if (Test-Path $exePath) {
-        Write-Host "Lenovo System Update já está instalado. Iniciando o processo de atualização..." -ForegroundColor Green
-        Start-Process -FilePath $exePath -ArgumentList "/CM -search A -action INSTALL -includerebootpackages 1 -noreboot" -Wait -NoNewWindow
+        Write-Host "Lenovo System Update já está instalado." -ForegroundColor Green
         
-        Write-Host "Comando Lenovo System Update executado." -ForegroundColor Green
-        Write-Host "Verifique os logs detalhados do System Update em: C:\ProgramData\Lenovo\SystemUpdate\Logs" -ForegroundColor Yellow
+        try {
+            # Cria o arquivo XML de sideload
+            $xmlContent | Out-File -FilePath $sideloadXmlPath -Encoding utf8 -Force
+            
+            Write-Host "Iniciando a atualização no modo Sideload (totalmente silencioso)..." -ForegroundColor Green
+            Start-Process -FilePath $exePath -ArgumentList "/Sideload $sideloadXmlPath" -Wait -NoNewWindow
+            
+            Write-Host "Comando Lenovo System Update executado." -ForegroundColor Green
+            Write-Host "Verifique os logs detalhados do System Update em: C:\ProgramData\Lenovo\SystemUpdate\Logs" -ForegroundColor Yellow
+        }
+        catch {
+            Write-Host "Erro ao executar a atualização do Lenovo System Update: $($_.Exception.Message)" -ForegroundColor Red
+        }
+        finally {
+            # Opcional: Remover o XML após a execução (mesmo em caso de erro)
+            Remove-Item $sideloadXmlPath -ErrorAction SilentlyContinue
+        }
     }
     else {
         Write-Host "Lenovo System Update não encontrado neste computador." -ForegroundColor Red
-        Write-Host "Tentando baixar e instalar o Lenovo System Update..." -ForegroundColor Yellow
+        Write-Host "Tentando baixar e instalar a versão silenciosa..." -ForegroundColor Yellow
 
-        # --- 2. Baixar o instalador ---
+        # --- 2. Baixar o instalador (instalação do System Update também deve ser silenciosa) ---
         try {
-            Write-Host "Baixando o instalador do Lenovo System Update de: $downloadURL" -ForegroundColor Yellow
+            Write-Host "Baixando o instalador de: $downloadURL" -ForegroundColor Yellow
             Invoke-WebRequest -Uri $downloadURL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
 
             if (Test-Path $downloadPath) {
-                Write-Host "Download concluído. Iniciando a instalação..." -ForegroundColor Green
-
-                # --- 3. Instalar em modo silencioso ---
-                # A maioria dos instaladores .exe pode ser executada com "/S" para instalação silenciosa
-                # É importante testar qual argumento funciona para este instalador específico.
+                Write-Host "Download concluído. Iniciando a instalação silenciosa..." -ForegroundColor Green
+                # O argumento /S é para a instalação silenciosa do tvsu.exe (o instalador em si)
                 Start-Process -FilePath $downloadPath -ArgumentList "/S" -Wait -NoNewWindow
                 
-                # Após a instalação, verificar novamente se o tvsu.exe agora existe
                 if (Test-Path $exePath) {
                     Write-Host "Lenovo System Update instalado com sucesso!" -ForegroundColor Green
-                    Write-Host "Iniciando o processo de atualização após a instalação..." -ForegroundColor Green
-                    Start-Process -FilePath $exePath -ArgumentList "/CM -search A -action INSTALL -includerebootpackages 1 -noreboot" -Wait -NoNewWindow
-                    Write-Host "Comando Lenovo System Update executado." -ForegroundColor Green
-                    Write-Host "Verifique os logs detalhados do System Update em: C:\ProgramData\Lenovo\SystemUpdate\Logs" -ForegroundColor Yellow
+                    Write-Host "Prosseguindo com a atualização no modo Sideload..." -ForegroundColor Green
+                    
+                    try {
+                        # Cria e executa o sideload.xml após a instalação
+                        $xmlContent | Out-File -FilePath $sideloadXmlPath -Encoding utf8 -Force
+                        Start-Process -FilePath $exePath -ArgumentList "/Sideload $sideloadXmlPath" -Wait -NoNewWindow
+                        
+                        Write-Host "Comando de atualização executado. Verifique os logs." -ForegroundColor Green
+                        Write-Host "Logs do System Update em: C:\ProgramData\Lenovo\SystemUpdate\Logs" -ForegroundColor Yellow
+                    }
+                    catch {
+                        Write-Host "Erro ao executar a atualização após a instalação: $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                    finally {
+                        Remove-Item $sideloadXmlPath -ErrorAction SilentlyContinue
+                    }
                 }
                 else {
-                    Write-Host "Instalação do Lenovo System Update foi concluída, mas o executável 'tvsu.exe' não foi encontrado no caminho esperado." -ForegroundColor Red
-                    Write-Host "Pode ser necessário verificar o caminho de instalação ou instalar manualmente." -ForegroundColor Yellow
+                    Write-Host "Instalação do System Update falhou ou o executável não foi encontrado no caminho esperado." -ForegroundColor Red
+                    Write-Host "Por favor, tente instalar manualmente ou verifique o log para mais detalhes." -ForegroundColor Yellow
                 }
-
-                # Opcional: Remover o instalador após a instalação
-                Remove-Item $downloadPath -ErrorAction SilentlyContinue
             }
             else {
                 Write-Host "Falha no download: O arquivo $downloadPath não foi criado." -ForegroundColor Red
             }
         }
         catch {
-            Write-Host "Erro durante o download ou instalação: $($_.Exception.Message)" -ForegroundColor Red
-            Write-Host "Verifique a URL de download (raw do GitHub) ou tente instalar manualmente." -ForegroundColor Yellow
+            Write-Host "Erro durante o download ou a tentativa de instalação: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Verifique a URL de download (raw do GitHub) ou a permissão de rede." -ForegroundColor Yellow
+        }
+        finally {
+            # Sempre tentar remover o instalador baixado
+            Remove-Item $downloadPath -ErrorAction SilentlyContinue
         }
     }
 
