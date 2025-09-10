@@ -1,88 +1,45 @@
-# ============================
-#   MULTITOOL POWERSHELL
-# ============================
+# ==============================
+# MULTITOOL POWERSHELL
+# ==============================
 
-function Info-Sistema {
+function Show-Menu {
     Clear-Host
-    Write-Host "==== INFORMAÇÕES DO SISTEMA ====" -ForegroundColor Cyan
-
-    $reportPath = "$env:USERPROFILE\Desktop\Info_Sistema.txt"
-    systeminfo | Out-File -FilePath $reportPath -Encoding UTF8
-
-    Write-Host "Relatório exportado para: $reportPath" -ForegroundColor Green
-    Start-Process notepad.exe $reportPath
-
-    Write-Host "`nPressione Enter para voltar ao menu..."
-    Read-Host | Out-Null
+    Write-Host "==== MULTITOOL IT ====" -ForegroundColor Cyan
+    Write-Host "1. Teste de Rede (Ping)"
+    Write-Host "2. Relatório de Bateria"
+    Write-Host "3. Informações do Sistema (exportar TXT)"
+    Write-Host "4. Lenovo System Update (modo silencioso)"
+    Write-Host "5. Teste Multimídia (Câmera, Microfone, Speaker)"
+    Write-Host "0. Sair"
+    Write-Host "======================="
 }
+
+# ==============================
+# Funções
+# ==============================
 
 function Teste-Rede {
     Clear-Host
     Write-Host "==== TESTE DE REDE ====" -ForegroundColor Cyan
+    $hosts = @()
 
-    $manual = Read-Host "Deseja digitar host(s)/IP(s) manualmente? (S/N) - se S digite 1 por linha; vazio/enter, 'done' ou 'n' termina a lista"
-
-    if ($manual -match '^[sS]') {
-        $hosts = @()
+    $manual = Read-Host "Deseja digitar um host/IP manualmente? (S/N)"
+    if ($manual -match "^[sS]$") {
         while ($true) {
-            $input = Read-Host "Digite o endereço ou IP (ex: 8.8.8.8 ou www.google.com). Deixe vazio ou 'done' para terminar"
-            if ([string]::IsNullOrWhiteSpace($input) -or $input -match '^(done|stop|sair|n|no)$') { break }
-            $hosts += $input.Trim()
+            $hostInput = Read-Host "Digite o endereço ou IP para teste de rede (ex: 8.8.8.8 ou www.google.com). Deixe vazio para parar"
+            if ([string]::IsNullOrWhiteSpace($hostInput)) { break }
+            $hosts += $hostInput
         }
-        if ($hosts.Count -eq 0) {
-            Write-Host "Nenhum host informado. Usando lista padrão..." -ForegroundColor Yellow
-            $hosts = @("8.8.8.8", "1.1.1.1", "www.google.com", "www.microsoft.com", "www.cloudflare.com")
-        }
-    } else {
-        $hosts = @("8.8.8.8", "1.1.1.1", "www.google.com", "www.microsoft.com", "www.cloudflare.com")
+    }
+    else {
+        $hosts = @("8.8.8.8","1.1.1.1","www.google.com","www.microsoft.com")
     }
 
     foreach ($h in $hosts) {
-        Write-Host "`n==== Testando: $h ====" -ForegroundColor Yellow
-
-        try {
-            $resolved = Resolve-DnsName -Name $h -ErrorAction Stop | Where-Object { $_.IPAddress } | Select-Object -ExpandProperty IPAddress -ErrorAction SilentlyContinue
-            if ($resolved) {
-                Write-Host "DNS: $h -> $($resolved -join ', ')"
-            } else {
-                Write-Host "Sem resolução DNS ou entrada inválida."
-            }
-        } catch {
-            Write-Host "Resolve-DnsName não pôde resolver. Tentando ping direto..." -ForegroundColor DarkYellow
-        }
-
-        try {
-            $resp = Test-Connection -ComputerName $h -Count 4 -ErrorAction Stop
-            $resp | Select-Object Address, ResponseTime, IPV4Address | Format-Table -AutoSize
-        } catch {
-            Write-Host "Falha no ping para $h" -ForegroundColor Red
-            try {
-                Write-Host "`n>> Resultado nslookup:" -ForegroundColor DarkGray
-                nslookup $h
-            } catch {}
-            try {
-                Write-Host "`n>> Resultado tracert (limite 10):" -ForegroundColor DarkGray
-                tracert -h 10 $h
-            } catch {}
-        }
+        Write-Host "`n--- Testando $h ---" -ForegroundColor Yellow
+        Test-Connection -Count 4 -ComputerName $h | Format-Table Address, ResponseTime, IPV4Address -AutoSize
     }
 
-    Write-Host "`nTeste concluído. Pressione Enter para voltar ao menu..."
-    Read-Host | Out-Null
-}
-
-function Logs-Erros {
-    Clear-Host
-    Write-Host "==== LOGS DE ERROS ====" -ForegroundColor Cyan
-    Get-EventLog -LogName System -EntryType Error -Newest 20 | Format-Table TimeGenerated, Source, EventID, Message -AutoSize
-    Write-Host "`nPressione Enter para voltar ao menu..."
-    Read-Host | Out-Null
-}
-
-function Flush-DNS {
-    Clear-Host
-    Write-Host "==== FLUSH DNS ====" -ForegroundColor Cyan
-    ipconfig /flushdns
     Write-Host "`nPressione Enter para voltar ao menu..."
     Read-Host | Out-Null
 }
@@ -90,107 +47,85 @@ function Flush-DNS {
 function Relatorio-Bateria {
     Clear-Host
     Write-Host "==== RELATÓRIO DE BATERIA ====" -ForegroundColor Cyan
+    $path = "$env:USERPROFILE\Desktop\relatorio_bateria.html"
+    powercfg /batteryreport /output $path
+    Write-Host "Relatório salvo em: $path" -ForegroundColor Green
+    Start-Process $path
+    Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
+}
 
-    $reportPath = "$env:USERPROFILE\Desktop\Relatorio_Bateria"
-    New-Item -Path $reportPath -ItemType Directory -Force | Out-Null
-
-    $uptime = (Get-CimInstance Win32_OperatingSystem).LastBootUpTime
-    $uptimeDuration = (Get-Date) - $uptime
-
-    $batteryReportPath = "$reportPath\battery-report.html"
-    powercfg /batteryreport /output $batteryReportPath | Out-Null
-
-    $batteryInfo = Get-CimInstance -Namespace root\wmi -ClassName BatteryFullChargedCapacity
-    $designInfo  = Get-CimInstance -Namespace root\wmi -ClassName BatteryStaticData
-
-    if ($batteryInfo -and $designInfo) {
-        $fullCharge = $batteryInfo.FullChargedCapacity
-        $designCap = $designInfo.DesignedCapacity
-        $healthPercent = [math]::Round(($fullCharge / $designCap) * 100, 2)
-
-        if ($healthPercent -lt 70) {
-            $batteryStatus = "⚠️ A bateria está com $healthPercent% da capacidade original. Recomenda-se substituição."
-        } else {
-            $batteryStatus = "✅ A bateria está saudável, com $healthPercent% da capacidade original."
-        }
-    } else {
-        $batteryStatus = "⚠️ Não foi possível determinar o estado da bateria."
-    }
-
-    $reportTextPath = "$reportPath\relatorio_bateria.txt"
-
-@"
-==== RELATÓRIO DE USO E SAÚDE DA BATERIA ====
-
-[1] Tempo ligado:
-    - Desde: $uptime
-    - Duração: $([math]::Round($uptimeDuration.TotalHours,2)) horas
-
-[2] Saúde da bateria:
-    - $batteryStatus
-
-[3] Relatório detalhado:
-    - Gerado em: $batteryReportPath
-
-"@ | Out-File -FilePath $reportTextPath -Encoding UTF8
-
-    Start-Process notepad.exe $reportTextPath
-    Start-Process $batteryReportPath
-
-    Write-Host "`nPressione Enter para voltar ao menu..."
-    Read-Host | Out-Null
+function Info-Sistema {
+    Clear-Host
+    Write-Host "==== INFORMAÇÕES DO SISTEMA ====" -ForegroundColor Cyan
+    $path = "$env:USERPROFILE\Desktop\info_sistema.txt"
+    systeminfo | Out-File -FilePath $path -Encoding utf8
+    Write-Host "Informações do sistema exportadas para: $path" -ForegroundColor Green
+    Start-Process notepad.exe $path
+    Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
 }
 
 function Lenovo-Update {
     Clear-Host
-    Write-Host "==== ATUALIZAÇÃO LENOVO (SYSTEM UPDATE) ====" -ForegroundColor Cyan
+    Write-Host "==== LENOVO SYSTEM UPDATE ====" -ForegroundColor Cyan
+    $log = "$env:USERPROFILE\Desktop\LenovoUpdate.log"
+    $exePath = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
 
-    $logPath = "$env:USERPROFILE\Desktop\Lenovo_Update_Log.txt"
-    $suPath = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
-
-    if (-Not (Test-Path $suPath)) {
-        Write-Host "Lenovo System Update não encontrado. Baixando e instalando..." -ForegroundColor Yellow
-        $installer = "$env:TEMP\system_update.exe"
-        Invoke-WebRequest -Uri "https://download.lenovo.com/pccbbs/thinkvantage_en/system_update_5.08.02.exe" -OutFile $installer
-        Start-Process -FilePath $installer -ArgumentList "/VERYSILENT" -Wait
+    if (Test-Path $exePath) {
+        Start-Process -FilePath $exePath -ArgumentList "/CM -search A -action INSTALL -includerebootpackages 1 -noreboot" -Wait -NoNewWindow
+        Write-Host "Atualizações concluídas. Log salvo em $log" -ForegroundColor Green
+        Get-Content $log | Out-File $log -Encoding utf8
+        Start-Process notepad.exe $log
+    }
+    else {
+        Write-Host "Lenovo System Update não encontrado neste computador." -ForegroundColor Red
     }
 
-    Write-Host "Executando atualização silenciosa..." -ForegroundColor Green
-    Start-Process -FilePath $suPath -ArgumentList "/CM -search A -action INSTALL -noicon" -Wait
+    Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
+}
 
-    $timestamp = Get-Date -Format "dd/MM/yyyy HH:mm"
-    Add-Content -Path $logPath -Value "[$timestamp] Atualizações Lenovo aplicadas com sucesso."
+function Teste-Multimidia {
+    Clear-Host
+    Write-Host "==== TESTE MULTIMÍDIA (CÂMERA, MICROFONE, SPEAKER) ====" -ForegroundColor Cyan
 
-    Start-Process notepad.exe $logPath
+    # 1. CÂMERA
+    Write-Host "`n[Câmeras detectadas]" -ForegroundColor Yellow
+    Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match "Camera|Video" } | Select-Object Name, Status
+    Write-Host "Abrindo aplicativo de Câmera para teste..." -ForegroundColor Green
+    Start-Process "microsoft.windows.camera:"
+
+    # 2. MICROFONE
+    Write-Host "`n[Microfones detectados]" -ForegroundColor Yellow
+    Get-CimInstance Win32_SoundDevice | Where-Object { $_.ProductName -match "Microphone" -or $_.Name -match "Microphone" } | Select-Object Name, Status
+    Write-Host "Abrindo configurações de microfone..." -ForegroundColor Green
+    Start-Process ms-settings:privacy-microphone
+
+    # 3. SPEAKER
+    Write-Host "`n[Alto-falantes detectados]" -ForegroundColor Yellow
+    Get-CimInstance Win32_SoundDevice | Select-Object Name, Status
+    Write-Host "Tocando som de teste..." -ForegroundColor Green
+    [console]::beep(800, 500)
+    $sound = "$env:WINDIR\Media\Windows Notify.wav"
+    if (Test-Path $sound) {
+        (New-Object Media.SoundPlayer $sound).PlaySync()
+    }
+
     Write-Host "`nPressione Enter para voltar ao menu..."
     Read-Host | Out-Null
 }
 
-function Show-Menu {
-    Clear-Host
-    Write-Host "================= MULTITOOL =================" -ForegroundColor Cyan
-    Write-Host "1. Informações do Sistema"
-    Write-Host "2. Teste de Rede"
-    Write-Host "3. Logs de Erros"
-    Write-Host "4. Flush DNS"
-    Write-Host "5. Relatório de Saúde da Bateria"
-    Write-Host "6. Atualizar Lenovo (System Update)"
-    Write-Host "0. Sair"
-    Write-Host "============================================="
-}
-
+# ==============================
+# Loop principal
+# ==============================
 do {
     Show-Menu
-    $option = Read-Host "Selecione uma opção"
-
-    switch ($option) {
-        1 { Info-Sistema }
-        2 { Teste-Rede }
-        3 { Logs-Erros }
-        4 { Flush-DNS }
-        5 { Relatorio-Bateria }
-        6 { Lenovo-Update }
-        0 { Write-Host "Saindo..." }
-        default { Write-Host "Opção inválida!" }
+    $choice = Read-Host "Escolha uma opção"
+    switch ($choice) {
+        "1" { Teste-Rede }
+        "2" { Relatorio-Bateria }
+        "3" { Info-Sistema }
+        "4" { Lenovo-Update }
+        "5" { Teste-Multimidia }
+        "0" { break }
+        default { Write-Host "Opção inválida!" -ForegroundColor Red; Start-Sleep -Seconds 1 }
     }
-} until ($option -eq 0)
+} while ($true)
