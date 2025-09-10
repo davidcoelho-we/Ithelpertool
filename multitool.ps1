@@ -17,7 +17,7 @@ function Show-Menu {
     Write-Host "3. Informações do Sistema (exportar TXT)"
     Write-Host "4. Teste Multimídia (Câmera, Microfone, Speaker)"
     Write-Host "5. Decrapifier (Limpeza e Otimização do Windows)"
-    Write-Host "6. Atualização Silenciosa do Lenovo Vantage"
+    Write-Host "6. Atualização Silenciosa de Drivers (Lenovo Commercial Vantage)"
     Write-Host "0. Sair"
     Write-Host "======================="
 }
@@ -186,7 +186,7 @@ function Decrapifier {
     # REMOVE O OFFICE 365 PRÉ-INSTALADO
     Write-Output "Iniciando desinstalacao de O365 OEM"
     
-    $registryPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+    $registryPath = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall"
     $subkeys = Get-ChildItem -Path $registryPath
     
     foreach ($subkey in $subkeys) {
@@ -379,7 +379,7 @@ function Decrapifier {
     If (!(Test-Path HKLM:\SOFTWARE\Policies\Microsoft\Windows\EdgeUpdate)) {
         New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft" -Name "EdgeUpdate" -Force | Out-Null
         New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate" -Name "CreateDesktopShortcutDefault" -Value 0 -PropertyType DWORD -Force | Out-Null
-        New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate" -Name "RemoveDesktopShortcut" -Value 1 -PropertyType DWORD -Force | Out-Null
+        New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate" -Name "RemoveDesktopShortcut" -Value 1 -PropertyType DWORD -Force | Out-Null
         New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate" -Name "RemoveDesktopShortcutDefault" -Value 1 -PropertyType DWORD -Force | Out-Null
     }
     If (!(Test-Path HKLM:SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer)) {
@@ -458,62 +458,71 @@ function Decrapifier {
     Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
 }
 
-function Update-LenovoVantage {
+function Update-LenovoDriversWithVantage {
     Clear-Host
-    Write-Host "==== ATUALIZAÇÃO SILENCIOSA DO LENOVO VANTAGE ====" -ForegroundColor Cyan
+    Write-Host "==== ATUALIZAÇÃO SILENCIOSA DE DRIVERS (LENOVO VANTAGE) ====" -ForegroundColor Cyan
     
-    # URL para o pacote de instalação silenciosa do Lenovo Commercial Vantage
+    # URL e caminhos
     $url = "https://download.lenovo.com/pccbbs/thinkvantage_en/lenovo_commercial_vantage_10_2506_39_0.zip"
     $downloadDir = "$env:TEMP\LenovoVantageInstaller"
     $zipFile = "$downloadDir\VantageInstaller.zip"
-    
-    # Verifica se a pasta de download existe e a cria se necessário
-    if (-not (Test-Path $downloadDir)) {
-        New-Item -Path $downloadDir -ItemType Directory | Out-Null
-    }
-    
-    Write-Host "Baixando o pacote de instalação do Lenovo Commercial Vantage..."
-    try {
-        Invoke-WebRequest -Uri $url -OutFile $zipFile -Method Get
-        Expand-Archive -Path $zipFile -DestinationPath $downloadDir -Force
-        Write-Host "Download e extração concluídos." -ForegroundColor Green
-    }
-    catch {
-        Write-Host "Erro ao baixar ou extrair o pacote. Verifique a conexão e o URL." -ForegroundColor Red
-        Write-Host "Pressione Enter para voltar ao menu..."
-        Read-Host | Out-Null
-        return
-    }
+    $vantageClientExe = "$($env:ProgramFiles)\Lenovo\Commercial Vantage\LgcsClient.exe"
 
-    # Define o caminho para o script de instalação
-    $installScript = "$downloadDir\Install.ps1"
+    # Passo 1: Verifica se o Lenovo Commercial Vantage já está instalado
+    if (-not (Test-Path $vantageClientExe)) {
+        Write-Host "Lenovo Commercial Vantage não encontrado. Baixando o instalador..."
+        
+        if (-not (Test-Path $downloadDir)) {
+            New-Item -Path $downloadDir -ItemType Directory | Out-Null
+        }
 
-    if (Test-Path $installScript) {
-        Write-Host "Iniciando a instalação silenciosa do Lenovo Commercial Vantage..."
         try {
-            Start-Process -FilePath powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$installScript`"" -Verb RunAs -Wait -NoNewWindow
-            Write-Host "Instalação do Lenovo Vantage concluída." -ForegroundColor Green
+            Invoke-WebRequest -Uri $url -OutFile $zipFile -Method Get
+            Expand-Archive -Path $zipFile -DestinationPath $downloadDir -Force
+            Write-Host "Download e extração concluídos." -ForegroundColor Green
+            
+            # O nome do script de instalação pode variar
+            $installScript = "$downloadDir\Install.ps1"
+            if (Test-Path $installScript) {
+                Write-Host "Iniciando a instalação silenciosa do Lenovo Commercial Vantage..."
+                Start-Process -FilePath powershell.exe -ArgumentList "-ExecutionPolicy Bypass -File `"$installScript`"" -Verb RunAs -Wait -NoNewWindow
+                Write-Host "Instalação do Lenovo Commercial Vantage concluída." -ForegroundColor Green
+            } else {
+                Write-Host "Erro: O script de instalação 'Install.ps1' não foi encontrado no pacote. A instalação não pode continuar." -ForegroundColor Red
+                Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
+                return
+            }
         }
         catch {
-            Write-Host "Ocorreu um erro durante a instalação do Lenovo Vantage." -ForegroundColor Red
-            Write-Host "Pressione Enter para voltar ao menu..."
-            Read-Host | Out-Null
+            Write-Host "Erro ao baixar ou instalar o Lenovo Commercial Vantage." -ForegroundColor Red
+            Write-Host "Mensagem de erro: $($_.Exception.Message)" -ForegroundColor Red
+            Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
             return
+        } finally {
+            # Limpeza dos arquivos temporários
+            if (Test-Path $downloadDir) {
+                Remove-Item -Path $downloadDir -Recurse -Force | Out-Null
+            }
         }
     } else {
-        Write-Host "O script de instalação 'Install.ps1' não foi encontrado no pacote extraído." -ForegroundColor Red
-        Write-Host "Pressione Enter para voltar ao menu..."
-        Read-Host | Out-Null
-        return
+        Write-Host "Lenovo Commercial Vantage já está instalado. Prosseguindo..." -ForegroundColor Yellow
     }
 
-    # Limpeza dos arquivos temporários
-    Write-Host "Limpando arquivos de instalação..."
-    Remove-Item -Path $downloadDir -Recurse -Force | Out-Null
-    Write-Host "Arquivos temporários removidos." -ForegroundColor Green
+    # Passo 2: Executa a atualização silenciosa dos drivers
+    if (Test-Path $vantageClientExe) {
+        Write-Host "Iniciando a busca e instalação silenciosa de drivers, firmware e BIOS." -ForegroundColor Yellow
+        Write-Host "Aguarde, este processo pode demorar alguns minutos..."
+        
+        # O comando Scan e Install do LgcsClient.exe
+        Start-Process -FilePath $vantageClientExe -ArgumentList "-Scan -Install" -Wait -NoNewWindow
 
-    Write-Host "`nLenovo Vantage instalado e configurado para atualizações silenciosas." -ForegroundColor Green
-    Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
+        Write-Host "Atualização concluída. Verifique as atualizações instaladas no Lenovo Commercial Vantage." -ForegroundColor Green
+    } else {
+        Write-Host "O caminho para LgcsClient.exe não foi encontrado após a instalação. A atualização não pode ser executada." -ForegroundColor Red
+    }
+
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host | Out-Null
 }
 
 
@@ -529,7 +538,7 @@ do {
         "3" { Info-Sistema }
         "4" { Teste-Multimidia }
         "5" { Decrapifier }
-        "6" { Update-LenovoVantage }
+        "6" { Update-LenovoDriversWithVantage }
         "0" { break }
         default { Write-Host "Opção inválida!" -ForegroundColor Red; Start-Sleep -Seconds 1 }
     }
