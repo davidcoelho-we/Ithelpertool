@@ -87,9 +87,10 @@ function Lenovo-Update {
     $downloadPath = "$env:TEMP\SystemUpdateInstaller.exe"
     $downloadURL = "https://raw.githubusercontent.com/davidcoelho-we/Ithelpertool/main/system_update_5.08.03.59.exe"
     $sideloadXmlPath = "$env:TEMP\sideload.xml"
+    $lenovoLogsDir = "C:\ProgramData\Lenovo\SystemUpdate\Logs" # Pasta padrão dos logs da Lenovo
+    $desktopLogsDir = "$env:USERPROFILE\Desktop\LenovoSystemUpdate_Logs" # Pasta na Área de Trabalho
 
     # Conteúdo do arquivo XML para atualização silenciosa
-    # Este XML instrui o System Update a buscar e instalar todas as atualizações.
     $xmlContent = @"
 <?xml version="1.0" encoding="UTF-8"?>
 <Manifest>
@@ -104,6 +105,39 @@ function Lenovo-Update {
 </Manifest>
 "@
 
+    # --- Função auxiliar para copiar logs ---
+    function Copy-LenovoLogs {
+        param (
+            [string]$SourceDir,
+            [string]$DestDir
+        )
+        if (Test-Path $SourceDir) {
+            # Cria a pasta de destino se não existir
+            New-Item -ItemType Directory -Path $DestDir -ErrorAction SilentlyContinue | Out-Null
+            
+            # Copia os logs mais recentes (ex: últimos 5 minutos de modificação)
+            $last5Minutes = (Get-Date).AddMinutes(-5)
+            $logsToCopy = Get-ChildItem -Path $SourceDir -File | Where-Object { $_.LastWriteTime -ge $last5Minutes }
+            
+            if ($logsToCopy.Count -eq 0) {
+                # Se nenhum log recente for encontrado, copia os logs da última hora
+                $lastHour = (Get-Date).AddHours(-1)
+                $logsToCopy = Get-ChildItem -Path $SourceDir -File | Where-Object { $_.LastWriteTime -ge $lastHour }
+                if ($logsToCopy.Count -eq 0) {
+                    # Se ainda não houver logs na última hora, pega os últimos 5 logs, por exemplo
+                    $logsToCopy = Get-ChildItem -Path $SourceDir -File | Sort-Object LastWriteTime -Descending | Select-Object -First 5
+                }
+            }
+
+            if ($logsToCopy.Count -gt 0) {
+                Write-Host "Copiando logs do Lenovo System Update para: $DestDir" -ForegroundColor Yellow
+                $logsToCopy | Copy-Item -Destination $DestDir -Force -Recurse -ErrorAction SilentlyContinue
+            } else {
+                Write-Host "Nenhum log recente do Lenovo System Update encontrado para copiar." -ForegroundColor Yellow
+            }
+        }
+    }
+
     # --- 1. Verificar se o Lenovo System Update já está instalado ---
     if (Test-Path $exePath) {
         Write-Host "Lenovo System Update já está instalado." -ForegroundColor Green
@@ -116,13 +150,13 @@ function Lenovo-Update {
             Start-Process -FilePath $exePath -ArgumentList "/Sideload $sideloadXmlPath" -Wait -NoNewWindow
             
             Write-Host "Comando Lenovo System Update executado." -ForegroundColor Green
-            Write-Host "Verifique os logs detalhados do System Update em: C:\ProgramData\Lenovo\SystemUpdate\Logs" -ForegroundColor Yellow
+            Copy-LenovoLogs -SourceDir $lenovoLogsDir -DestDir $desktopLogsDir
+            Write-Host "Os logs foram copiados para: $desktopLogsDir" -ForegroundColor Yellow
         }
         catch {
             Write-Host "Erro ao executar a atualização do Lenovo System Update: $($_.Exception.Message)" -ForegroundColor Red
         }
         finally {
-            # Opcional: Remover o XML após a execução (mesmo em caso de erro)
             Remove-Item $sideloadXmlPath -ErrorAction SilentlyContinue
         }
     }
@@ -130,14 +164,13 @@ function Lenovo-Update {
         Write-Host "Lenovo System Update não encontrado neste computador." -ForegroundColor Red
         Write-Host "Tentando baixar e instalar a versão silenciosa..." -ForegroundColor Yellow
 
-        # --- 2. Baixar o instalador (instalação do System Update também deve ser silenciosa) ---
+        # --- 2. Baixar o instalador ---
         try {
             Write-Host "Baixando o instalador de: $downloadURL" -ForegroundColor Yellow
             Invoke-WebRequest -Uri $downloadURL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
 
             if (Test-Path $downloadPath) {
                 Write-Host "Download concluído. Iniciando a instalação silenciosa..." -ForegroundColor Green
-                # O argumento /S é para a instalação silenciosa do tvsu.exe (o instalador em si)
                 Start-Process -FilePath $downloadPath -ArgumentList "/S" -Wait -NoNewWindow
                 
                 if (Test-Path $exePath) {
@@ -145,12 +178,12 @@ function Lenovo-Update {
                     Write-Host "Prosseguindo com a atualização no modo Sideload..." -ForegroundColor Green
                     
                     try {
-                        # Cria e executa o sideload.xml após a instalação
                         $xmlContent | Out-File -FilePath $sideloadXmlPath -Encoding utf8 -Force
                         Start-Process -FilePath $exePath -ArgumentList "/Sideload $sideloadXmlPath" -Wait -NoNewWindow
                         
-                        Write-Host "Comando de atualização executado. Verifique os logs." -ForegroundColor Green
-                        Write-Host "Logs do System Update em: C:\ProgramData\Lenovo\SystemUpdate\Logs" -ForegroundColor Yellow
+                        Write-Host "Comando de atualização executado." -ForegroundColor Green
+                        Copy-LenovoLogs -SourceDir $lenovoLogsDir -DestDir $desktopLogsDir
+                        Write-Host "Os logs foram copiados para: $desktopLogsDir" -ForegroundColor Yellow
                     }
                     catch {
                         Write-Host "Erro ao executar a atualização após a instalação: $($_.Exception.Message)" -ForegroundColor Red
@@ -173,7 +206,6 @@ function Lenovo-Update {
             Write-Host "Verifique a URL de download (raw do GitHub) ou a permissão de rede." -ForegroundColor Yellow
         }
         finally {
-            # Sempre tentar remover o instalador baixado
             Remove-Item $downloadPath -ErrorAction SilentlyContinue
         }
     }
