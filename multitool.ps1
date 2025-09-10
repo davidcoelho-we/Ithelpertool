@@ -92,7 +92,7 @@ function Teste-Multimidia {
     # 1. CÂMERA
     Write-Host "`n[Câmeras detectadas]" -ForegroundColor Yellow
     Get-CimInstance Win32_PnPEntity | Where-Object { $_.Name -match "Camera|Video" } | Select-Object Name, Status
-    Write-Host "Abrindo aplicativo de Câmera para teste (verifique a funcionalidade manualmente)..." -ForegroundColor Green
+    Write-Host "Abrindo aplicativo de Câmera. Verifique se a imagem aparece corretamente." -ForegroundColor Green
     try {
         Start-Process "microsoft.windows.camera:"
     }
@@ -103,7 +103,7 @@ function Teste-Multimidia {
     # 2. MICROFONE
     Write-Host "`n[Microfones detectados]" -ForegroundColor Yellow
     Get-CimInstance Win32_SoundDevice | Where-Object { $_.ProductName -match "Microphone" -or $_.Name -match "Microphone" } | Select-Object Name, Status
-    Write-Host "Abrindo configurações de microfone (verifique a funcionalidade manualmente)..." -ForegroundColor Green
+    Write-Host "Abrindo configurações de microfone. Fale no microfone e verifique se a barra de nível se move." -ForegroundColor Green
     try {
         Start-Process ms-settings:privacy-microphone
     }
@@ -114,7 +114,7 @@ function Teste-Multimidia {
     # 3. SPEAKER
     Write-Host "`n[Alto-falantes detectados]" -ForegroundColor Yellow
     Get-CimInstance Win32_SoundDevice | Select-Object Name, Status
-    Write-Host "Tocando som de teste..." -ForegroundColor Green
+    Write-Host "Tocando som de teste. Verifique se você consegue ouvi-lo." -ForegroundColor Green
     try {
         [console]::beep(800, 500)
         $sound = "$env:WINDIR\Media\Windows Notify.wav"
@@ -136,82 +136,60 @@ function Lenovo-UpdateCV {
     Clear-Host
     Write-Host "==== ATUALIZAÇÃO via Commercial Vantage (SU Helper) ====" -ForegroundColor Cyan
 
-    $packageName = "E046963F.LenovoCommercialVantage"
     $suHelper = "C:\Program Files (x86)\Lenovo\System Update Helper\SUHelper.exe"
     $logDest = "$env:USERPROFILE\Desktop\Vantage_UpdateLogs"
     $logFile = "$logDest\Lenovo_Update_Log.txt"
-    $zipUrl = "https://drive.google.com/uc?export=download&id=1j5vXA0WZCmWwkFepTn5Vip0FTcduM_k6"
-    $zipPath = "$env:TEMP\VantageInstaller.zip"
-    $extractPath = "$env:TEMP\VantageInstaller"
 
-    New-Item -Path $logDest -ItemType Directory -Force | Out-Null
-    "==== LOG DE EXECUÇÃO - $(Get-Date) ====" | Out-File $logFile -Encoding UTF8 -Append
-
+    # Cria o diretório de log
     try {
-        # Verifica se o Vantage já está instalado
-        $vantageInstalled = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
-        if (-not $vantageInstalled) {
-            Write-Host "Lenovo Commercial Vantage não está instalado. Baixando pacote ZIP..." -ForegroundColor Yellow
-            "Baixando de $zipUrl" | Out-File $logFile -Append
-
-            try {
-                Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
-                "Download concluído: $zipPath" | Out-File $logFile -Append
-
-                # Extrai o ZIP
-                Expand-Archive -Path $zipPath -DestinationPath $extractPath -Force
-                "Arquivo extraído em: $extractPath" | Out-File $logFile -Append
-
-                # Procura instalador
-                $installer = Get-ChildItem -Path $extractPath -Filter "*.exe" -Recurse | Select-Object -First 1
-                if ($installer) {
-                    Write-Host "Instalando Vantage + SU Helper..." -ForegroundColor Cyan
-                    Start-Process -FilePath $installer.FullName -ArgumentList "/quiet" -Wait -NoNewWindow
-                    "Instalação concluída." | Out-File $logFile -Append
-                } else {
-                    "ERRO: Nenhum instalador encontrado no ZIP extraído." | Out-File $logFile -Append
-                    Write-Host "Nenhum instalador encontrado no ZIP extraído." -ForegroundColor Red
-                    return
-                }
-            }
-            catch {
-                "ERRO: Falha ao baixar/instalar Vantage -> $($_.Exception.Message)" | Out-File $logFile -Append
-                Write-Host "Erro ao instalar o Lenovo Commercial Vantage." -ForegroundColor Red
-                return
-            }
-        } else {
-            "Lenovo Commercial Vantage já instalado." | Out-File $logFile -Append
-        }
-
-        # Verifica SU Helper
-        if (!(Test-Path $suHelper)) {
-            "ERRO: SU Helper não encontrado em $suHelper" | Out-File $logFile -Append
-            Write-Host "SU Helper não encontrado, mesmo após instalação." -ForegroundColor Yellow
-            return
-        }
-
-        # Executa SU Helper update
-        Write-Host "Executando atualização via SU Helper..." -ForegroundColor Green
-        Start-Process -FilePath $suHelper -ArgumentList "update" -Wait -NoNewWindow
-        "SU Helper finalizado." | Out-File $logFile -Append
-
-        # Histórico de updates
-        $updates = Get-CimInstance -Namespace root\lenovo -Class Lenovo_Updates -ErrorAction SilentlyContinue
-        if ($updates) {
-            $updates | Select-Object Severity, Status, Title, Version | Out-File "$logDest\UpdatesHistory.txt" -Encoding UTF8
-            $updates | Export-Csv -Path "$logDest\UpdatesHistory.csv" -Encoding UTF8 -NoTypeInformation
-            Start-Process notepad.exe "$logDest\UpdatesHistory.txt"
-        } else {
-            Write-Host "Não foi possível acessar os dados de histórico via WMI." -ForegroundColor Yellow
-        }
+        New-Item -Path $logDest -ItemType Directory -Force | Out-Null
     }
     catch {
-        "ERRO: $($_.Exception.Message)" | Out-File $logFile -Append
-        Write-Host "Erro ao executar a atualização: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Erro ao criar o diretório de log: $($_.Exception.Message)" -ForegroundColor Red
+    }
+    
+    "==== LOG DE EXECUÇÃO - $(Get-Date) ====" | Out-File $logFile -Encoding UTF8 -Append
+
+    if (Test-Path $suHelper) {
+        Write-Host "SU Helper encontrado. Executando atualização..." -ForegroundColor Green
+        "SU Helper encontrado." | Out-File $logFile -Append
+
+        # Executa SU Helper update
+        try {
+            Start-Process -FilePath $suHelper -ArgumentList "update" -Wait -NoNewWindow
+            "SU Helper finalizado." | Out-File $logFile -Append
+            Write-Host "Atualização via SU Helper concluída." -ForegroundColor Green
+        }
+        catch {
+            "ERRO: Falha na execução do SU Helper -> $($_.Exception.Message)" | Out-File $logFile -Append
+            Write-Host "Erro ao executar o SU Helper: $($_.Exception.Message)" -ForegroundColor Red
+        }
+
+        # Histórico de updates
+        try {
+            $updates = Get-CimInstance -Namespace root\lenovo -Class Lenovo_Updates -ErrorAction SilentlyContinue
+            if ($updates) {
+                $updates | Select-Object Severity, Status, Title, Version | Out-File "$logDest\UpdatesHistory.txt" -Encoding UTF8
+                $updates | Export-Csv -Path "$logDest\UpdatesHistory.csv" -Encoding UTF8 -NoTypeInformation
+                Write-Host "Histórico de atualizações salvo em: $logDest\UpdatesHistory.txt" -ForegroundColor Green
+                Start-Process notepad.exe "$logDest\UpdatesHistory.txt"
+            } else {
+                Write-Host "Não foi possível acessar os dados de histórico via WMI. Verifique se o Commercial Vantage está instalado e funcional." -ForegroundColor Yellow
+            }
+        }
+        catch {
+             Write-Host "Erro ao gerar histórico de atualizações: $($_.Exception.Message)" -ForegroundColor Red
+        }
+
+    }
+    else {
+        Write-Host "SU Helper não encontrado em $suHelper." -ForegroundColor Red
+        Write-Host "Verifique se o Lenovo Commercial Vantage está instalado. A atualização não pode prosseguir." -ForegroundColor Red
+        "ERRO: SU Helper não encontrado." | Out-File $logFile -Append
     }
 
     "==== FIM DO LOG ====" | Out-File $logFile -Append
-    Write-Host "`nLog detalhado salvo em: $logFile" -ForegroundColor Green
+    Write-Host "`nLog de execução salvo em: $logFile" -ForegroundColor Green
     Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
 }
 
