@@ -21,19 +21,7 @@ function Show-Menu {
 function Teste-Rede {
     Clear-Host
     Write-Host "==== TESTE DE REDE ====" -ForegroundColor Cyan
-    $hosts = @()
-
-    $manual = Read-Host "Deseja digitar um host/IP manualmente? (S/N)"
-    if ($manual -match "^[sS]$") {
-        while ($true) {
-            $hostInput = Read-Host "Digite o endereço ou IP para teste de rede (ex: 8.8.8.8 ou www.google.com). Deixe vazio para parar"
-            if ([string]::IsNullOrWhiteSpace($hostInput)) { break }
-            $hosts += $hostInput
-        }
-    }
-    else {
-        $hosts = @("8.8.8.8","1.1.1.1","www.google.com","www.microsoft.com")
-    }
+    $hosts = @("8.8.8.8","1.1.1.1","www.google.com","www.microsoft.com")
 
     foreach ($h in $hosts) {
         Write-Host "`n--- Testando $h ---" -ForegroundColor Yellow
@@ -67,25 +55,36 @@ function Info-Sistema {
 function Lenovo-Update {
     Clear-Host
     Write-Host "==== LENOVO SYSTEM UPDATE ====" -ForegroundColor Cyan
-    $log = "$env:USERPROFILE\Desktop\LenovoUpdate.log"
+    $logPath = "$env:ProgramData\Lenovo\System Update\Logs\tvsu.log"
     $exePath = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
 
     if (Test-Path $exePath) {
+        Write-Host "Executando Lenovo System Update em modo silencioso..." -ForegroundColor Green
+        Write-Host "Uma nova janela do PowerShell será aberta para monitorar o progresso." -ForegroundColor Yellow
+        Write-Host "Pressione Ctrl+C na janela de log para parar o monitoramento quando a instalação terminar." -ForegroundColor Yellow
+        
+        # Inicia o monitoramento do log em uma nova janela.
+        Start-Process -FilePath powershell.exe -ArgumentList "-NoExit", "-Command", "Get-Content -Path '$logPath' -Wait"
+
+        # Inicia a atualização e espera a conclusão.
         Start-Process -FilePath $exePath -ArgumentList "/CM -search A -action INSTALL -includerebootpackages 1 -noreboot" -Wait -NoNewWindow
-        Write-Host "Atualizações concluídas. Log salvo em $log" -ForegroundColor Green
-        Get-Content $log | Out-File $log -Encoding utf8
-        Start-Process notepad.exe $log
+        
+        Write-Host "`nAtualizações concluídas!" -ForegroundColor Green
+        
+        # Pede para o usuário fechar a janela de log.
+        Read-Host "`nA atualização foi concluída. Feche a janela de log para continuar." | Out-Null
     }
     else {
         Write-Host "Lenovo System Update não encontrado neste computador." -ForegroundColor Red
     }
 
-    Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
+    Write-Host "`nPressione Enter para voltar ao menu..."
+    Read-Host | Out-Null
 }
 
 function Teste-Multimidia {
     Clear-Host
-    Write-Host "==== TESTE MULTIMÍDIA (CÂMERA, MICROFONE, SPEAKER) ====" -ForegroundColor Cyan
+    Write-Host "==== TESTE MULTIMÍDIA (Câmera, Microfone, Speaker) ====" -ForegroundColor Cyan
 
     # 1. CÂMERA
     Write-Host "`n[Câmeras detectadas]" -ForegroundColor Yellow
