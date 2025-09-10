@@ -136,36 +136,77 @@ function Lenovo-UpdateCV {
     Clear-Host
     Write-Host "==== ATUALIZAÇÃO via Commercial Vantage (SU Helper) ====" -ForegroundColor Cyan
 
+    $packageName = "E046963F.LenovoCommercialVantage"
     $suHelper = "C:\Program Files (x86)\Lenovo\System Update Helper\SUHelper.exe"
     $logDest = "$env:USERPROFILE\Desktop\Vantage_UpdateLogs"
-    New-Item -Path $logDest -ItemType Directory -Force | Out-Null
+    $logFile = "$logDest\Lenovo_Update_Log.txt"
+    $installerUrl = "https://raw.githubusercontent.com/davidcoelho-we/Ithelpertool/main/VantageInstaller.exe"
+    $installerPath = "$env:TEMP\VantageInstaller.exe"
 
-    if (!(Test-Path $suHelper)) {
-        Write-Host "SU Helper não encontrado. É necessário instalar o Lenovo Commercial Vantage + SU Helper." -ForegroundColor Yellow
-        Write-Host "Baixe e instale o pacote oficial em: https://support.lenovo.com" -ForegroundColor Yellow
-        Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
-        return
-    }
+    # Criar pasta de logs
+    New-Item -Path $logDest -ItemType Directory -Force | Out-Null
+    "==== LOG DE EXECUÇÃO - $(Get-Date) ====" | Out-File $logFile -Encoding UTF8 -Append
 
     try {
-        Write-Host "Executando atualização via SU Helper..." -ForegroundColor Green
-        Start-Process -FilePath $suHelper -ArgumentList "update" -Wait -NoNewWindow
+        # Verifica se Vantage está instalado
+        $vantageInstalled = Get-AppxPackage -Name $packageName -ErrorAction SilentlyContinue
+        if (-not $vantageInstalled) {
+            Write-Host "Lenovo Commercial Vantage não está instalado. Baixando instalador..." -ForegroundColor Yellow
+            "Baixando instalador de $installerUrl" | Out-File $logFile -Append
 
-        Write-Host "Atualização concluída. Capturando histórico via WMI..." -ForegroundColor Green
+            try {
+                Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath -UseBasicParsing
+                "Download concluído: $installerPath" | Out-File $logFile -Append
+                Write-Host "Instalando Vantage + SU Helper..." -ForegroundColor Cyan
+                Start-Process -FilePath $installerPath -ArgumentList "Install -Vantage -SuHelper" -Wait -NoNewWindow
+                "Instalação concluída." | Out-File $logFile -Append
+            }
+            catch {
+                "ERRO: Falha ao baixar/instalar Vantage -> $($_.Exception.Message)" | Out-File $logFile -Append
+                Write-Host "Erro ao instalar o Lenovo Commercial Vantage." -ForegroundColor Red
+                return
+            }
+        } else {
+            "Lenovo Commercial Vantage já instalado." | Out-File $logFile -Append
+        }
+
+        # Verifica SU Helper
+        if (!(Test-Path $suHelper)) {
+            "ERRO: SU Helper não encontrado em $suHelper" | Out-File $logFile -Append
+            Write-Host "SU Helper não encontrado, mesmo após instalação." -ForegroundColor Yellow
+            return
+        } else {
+            "SU Helper localizado: $suHelper" | Out-File $logFile -Append
+        }
+
+        # Executa SU Helper
+        Write-Host "Executando atualização via SU Helper..." -ForegroundColor Green
+        "Executando SU Helper (update)..." | Out-File $logFile -Append
+        Start-Process -FilePath $suHelper -ArgumentList "update" -Wait -NoNewWindow
+        "SU Helper finalizado." | Out-File $logFile -Append
+
+        # Coleta histórico de updates
+        Write-Host "Coletando histórico de atualizações..." -ForegroundColor Cyan
+        "Consultando histórico via WMI..." | Out-File $logFile -Append
         $updates = Get-CimInstance -Namespace root\lenovo -Class Lenovo_Updates -ErrorAction SilentlyContinue
 
         if ($updates) {
             $updates | Select-Object Severity, Status, Title, Version | Out-File "$logDest\UpdatesHistory.txt" -Encoding UTF8
-            Write-Host "Histórico salvo em: $logDest\UpdatesHistory.txt" -ForegroundColor Green
+            $updates | Export-Csv -Path "$logDest\UpdatesHistory.csv" -Encoding UTF8 -NoTypeInformation
+            "Histórico exportado para TXT e CSV." | Out-File $logFile -Append
             Start-Process notepad.exe "$logDest\UpdatesHistory.txt"
         } else {
+            "AVISO: Não foi possível capturar histórico via WMI." | Out-File $logFile -Append
             Write-Host "Não foi possível acessar os dados de histórico via WMI." -ForegroundColor Yellow
         }
     }
     catch {
-        Write-Host "Erro ao executar o SU Helper: $($_.Exception.Message)" -ForegroundColor Red
+        "ERRO: $($_.Exception.Message)" | Out-File $logFile -Append
+        Write-Host "Erro ao executar a atualização: $($_.Exception.Message)" -ForegroundColor Red
     }
 
+    "==== FIM DO LOG ====" | Out-File $logFile -Append
+    Write-Host "`nLog detalhado salvo em: $logFile" -ForegroundColor Green
     Read-Host "Pressione Enter para voltar ao menu..." | Out-Null
 }
 
