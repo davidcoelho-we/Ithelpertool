@@ -81,29 +81,16 @@ function Info-Sistema {
 function Lenovo-Update {
     Clear-Host
     Write-Host "==== LENOVO SYSTEM UPDATE ====" -ForegroundColor Cyan
-    Write-Host "==== Usando modo Sideload para instalação/atualização silenciosa ====" -ForegroundColor Yellow
+    Write-Host "==== Tentando instalação/atualização TOTALMENTE silenciosa ====" -ForegroundColor Yellow
+    Write-Host "Referência: Lenovo Deployment Guide (DG-SystemUpdateSuite.pdf)" -ForegroundColor DarkGray
 
     $exePath = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
     $downloadPath = "$env:TEMP\SystemUpdateInstaller.exe"
+    # URL RAW do GitHub para download direto do executável
     $downloadURL = "https://raw.githubusercontent.com/davidcoelho-we/Ithelpertool/main/system_update_5.08.03.59.exe"
-    $sideloadXmlPath = "$env:TEMP\sideload.xml"
+    
     $lenovoLogsDir = "C:\ProgramData\Lenovo\SystemUpdate\Logs" # Pasta padrão dos logs da Lenovo
     $desktopLogsDir = "$env:USERPROFILE\Desktop\LenovoSystemUpdate_Logs" # Pasta na Área de Trabalho
-
-    # Conteúdo do arquivo XML para atualização silenciosa
-    $xmlContent = @"
-<?xml version="1.0" encoding="UTF-8"?>
-<Manifest>
-  <Commands>
-    <Command>
-      <ApplicationName>System Update</ApplicationName>
-      <Parameters>
-        /CM -search A -action INSTALL -includerebootpackages 1 -noreboot -packagetype 1 -packagename ALL
-      </Parameters>
-    </Command>
-  </Commands>
-</Manifest>
-"@
 
     # --- Função auxiliar para copiar logs ---
     function Copy-LenovoLogs {
@@ -116,15 +103,16 @@ function Lenovo-Update {
             New-Item -ItemType Directory -Path $DestDir -ErrorAction SilentlyContinue | Out-Null
             
             # Copia os logs mais recentes (ex: últimos 5 minutos de modificação)
+            # A lógica é pegar os logs mais prováveis de serem da execução atual.
             $last5Minutes = (Get-Date).AddMinutes(-5)
             $logsToCopy = Get-ChildItem -Path $SourceDir -File | Where-Object { $_.LastWriteTime -ge $last5Minutes }
             
             if ($logsToCopy.Count -eq 0) {
-                # Se nenhum log recente for encontrado, copia os logs da última hora
+                # Se nenhum log muito recente for encontrado, tenta logs da última hora
                 $lastHour = (Get-Date).AddHours(-1)
                 $logsToCopy = Get-ChildItem -Path $SourceDir -File | Where-Object { $_.LastWriteTime -ge $lastHour }
                 if ($logsToCopy.Count -eq 0) {
-                    # Se ainda não houver logs na última hora, pega os últimos 5 logs, por exemplo
+                    # Como último recurso, pega os 5 logs mais recentes (sem garantia de serem da execução atual)
                     $logsToCopy = Get-ChildItem -Path $SourceDir -File | Sort-Object LastWriteTime -Descending | Select-Object -First 5
                 }
             }
@@ -135,6 +123,8 @@ function Lenovo-Update {
             } else {
                 Write-Host "Nenhum log recente do Lenovo System Update encontrado para copiar." -ForegroundColor Yellow
             }
+        } else {
+            Write-Host "Pasta de logs padrão da Lenovo não encontrada em '$SourceDir'." -ForegroundColor Yellow
         }
     }
 
@@ -143,11 +133,9 @@ function Lenovo-Update {
         Write-Host "Lenovo System Update já está instalado." -ForegroundColor Green
         
         try {
-            # Cria o arquivo XML de sideload
-            $xmlContent | Out-File -FilePath $sideloadXmlPath -Encoding utf8 -Force
-            
-            Write-Host "Iniciando a atualização no modo Sideload (totalmente silencioso)..." -ForegroundColor Green
-            Start-Process -FilePath $exePath -ArgumentList "/Sideload $sideloadXmlPath" -Wait -NoNewWindow
+            Write-Host "Iniciando a atualização no modo agendado silencioso (/SCHEDULENOW)..." -ForegroundColor Green
+            # O argumento /SCHEDULENOW é projetado para instalar todas as atualizações sem UI.
+            Start-Process -FilePath $exePath -ArgumentList "/SCHEDULENOW" -Wait -NoNewWindow
             
             Write-Host "Comando Lenovo System Update executado." -ForegroundColor Green
             Copy-LenovoLogs -SourceDir $lenovoLogsDir -DestDir $desktopLogsDir
@@ -155,14 +143,12 @@ function Lenovo-Update {
         }
         catch {
             Write-Host "Erro ao executar a atualização do Lenovo System Update: $($_.Exception.Message)" -ForegroundColor Red
-        }
-        finally {
-            Remove-Item $sideloadXmlPath -ErrorAction SilentlyContinue
+            Write-Host "Verifique a documentação para argumentos de automação específicos da sua versão do System Update." -ForegroundColor Yellow
         }
     }
     else {
         Write-Host "Lenovo System Update não encontrado neste computador." -ForegroundColor Red
-        Write-Host "Tentando baixar e instalar a versão silenciosa..." -ForegroundColor Yellow
+        Write-Host "Tentando baixar e instalar a versão silenciosa do instalador tvsu.exe..." -ForegroundColor Yellow
 
         # --- 2. Baixar o instalador ---
         try {
@@ -170,16 +156,18 @@ function Lenovo-Update {
             Invoke-WebRequest -Uri $downloadURL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
 
             if (Test-Path $downloadPath) {
-                Write-Host "Download concluído. Iniciando a instalação silenciosa..." -ForegroundColor Green
-                Start-Process -FilePath $downloadPath -ArgumentList "/S" -Wait -NoNewWindow
+                Write-Host "Download concluído. Iniciando a instalação silenciosa do tvsu.exe..." -ForegroundColor Green
+                # Tentativa de instalação super silenciosa para o EXE wrapper de MSI
+                # /s para o wrapper, e /v"/qn" para o MSI interno.
+                # Esta é a combinação mais provável para instaladores da Lenovo para ser 100% silenciosa.
+                Start-Process -FilePath $downloadPath -ArgumentList "/s /v`"/qn`"" -Wait -NoNewWindow
                 
                 if (Test-Path $exePath) {
                     Write-Host "Lenovo System Update instalado com sucesso!" -ForegroundColor Green
-                    Write-Host "Prosseguindo com a atualização no modo Sideload..." -ForegroundColor Green
+                    Write-Host "Prosseguindo com a atualização no modo agendado silencioso..." -ForegroundColor Green
                     
                     try {
-                        $xmlContent | Out-File -FilePath $sideloadXmlPath -Encoding utf8 -Force
-                        Start-Process -FilePath $exePath -ArgumentList "/Sideload $sideloadXmlPath" -Wait -NoNewWindow
+                        Start-Process -FilePath $exePath -ArgumentList "/SCHEDULENOW" -Wait -NoNewWindow
                         
                         Write-Host "Comando de atualização executado." -ForegroundColor Green
                         Copy-LenovoLogs -SourceDir $lenovoLogsDir -DestDir $desktopLogsDir
@@ -188,13 +176,10 @@ function Lenovo-Update {
                     catch {
                         Write-Host "Erro ao executar a atualização após a instalação: $($_.Exception.Message)" -ForegroundColor Red
                     }
-                    finally {
-                        Remove-Item $sideloadXmlPath -ErrorAction SilentlyContinue
-                    }
                 }
                 else {
                     Write-Host "Instalação do System Update falhou ou o executável não foi encontrado no caminho esperado." -ForegroundColor Red
-                    Write-Host "Por favor, tente instalar manualmente ou verifique o log para mais detalhes." -ForegroundColor Yellow
+                    Write-Host "O argumento de instalação silenciosa '/s /v\"/qn\"' pode não ser o correto para este instalador. Tente instalar manualmente para verificar o comportamento." -ForegroundColor Yellow
                 }
             }
             else {
