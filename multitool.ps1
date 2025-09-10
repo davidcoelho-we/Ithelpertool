@@ -68,22 +68,13 @@ function AV-Test {
     Pause
 }
 
-# 5 - Lenovo Update (com opção de modo de instalação)
+# 5 - Lenovo Update (modo de instalação semi-silencioso por padrão)
 function Lenovo-Update {
     Clear-Host
     Write-Host "==== LENOVO SYSTEM UPDATE ====" -ForegroundColor Cyan
 
-    # Pergunta ao usuário qual modo de instalação usar se o programa não for encontrado
-    Write-Host "Escolha o modo de instalação (caso o System Update não esteja presente):"
-    Write-Host "1. Totalmente Silencioso (nenhuma janela visível)" -ForegroundColor Yellow
-    Write-Host "2. Semi-Silencioso (mostra apenas a barra de progresso)" -ForegroundColor Yellow
-    $installMode = Read-Host "Selecione uma opção [Padrão: 1]"
- 
-    $installerArgs = ""
-    switch ($installMode) {
-        '2' { $installerArgs = '/s /v"/qb"' }
-        default { $installerArgs = '/s /v"/qn"' } # Padrão para '1' ou qualquer outra tecla
-    }
+    # Define os argumentos para a instalação semi-silenciosa (com barra de progresso) como padrão
+    $installerArgs = '/s /v"/qb"'
 
     $exePath = "C:\Program Files (x86)\Lenovo\System Update\tvsu.exe"
     $downloadPath = "$env:TEMP\SystemUpdateInstaller.exe"
@@ -116,10 +107,10 @@ function Lenovo-Update {
             Write-Host "Erro ao executar atualização: $($_.Exception.Message)" -ForegroundColor Red
         }
     } else {
-        Write-Host "System Update não instalado. Baixando e instalando no modo escolhido..." -ForegroundColor Yellow
+        Write-Host "System Update não instalado. Baixando e instalando (modo semi-silencioso)..." -ForegroundColor Yellow
         try {
             Invoke-WebRequest -Uri $downloadURL -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
-            # Usa a variável com os argumentos de instalação escolhidos pelo usuário
+            # Usa a variável com os argumentos de instalação definidos
             Start-Process -FilePath $downloadPath -ArgumentList $installerArgs -Wait -NoNewWindow
             
             if (Test-Path $exePath) {
